@@ -38,11 +38,12 @@ def get_connection():
 class Task(BaseModel):
     taskname : str
     details : str
+    status : str
 
 # Pydantic model for validation
 class Update(BaseModel):
-    taskname : str
-    updates : str
+    task : str
+    update : str
     efforts : int
 
 # ✅ Read all tasks
@@ -60,13 +61,50 @@ def get_tasks():
                 "taskname": row[1],
                 "details": row[2],
                 "created_at": row[3],
-                "updated_at": row[4]
+                "updated_at": row[4],
+                "status": row[5],
+
             })
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+@app.get("/tasks/active")
+def active_tasks():
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("select count(taskname) from task where status = 'Active';")
+        rows = cursor.fetchall()
+        result = ''
+        for row in rows:
+            result = row[0]
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.get("/tasks/active/name")
+def active_tasks():
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("select taskname from task where status = 'Active';")
+        rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            result.append({
+                "taskname": row[0]
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
 
 # ✅ Create (Insert) task
 @app.post("/tasks")
@@ -76,10 +114,10 @@ def create_task(task: Task):
         cursor = conn.cursor()
         now = datetime.datetime.now()
         query = """
-        INSERT INTO task (taskname, details, created_at, updated_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO task (taskname, details, created_at, updated_at, status)
+        VALUES (?, ?, ?, ?, ?)
         """
-        cursor.execute(query, (task.taskname, task.details, now, now))
+        cursor.execute(query, (task.taskname, task.details, now, now,"Active"))
         conn.commit()
         return {"message": "Task inserted successfully"}
     except Exception as e:
@@ -96,10 +134,10 @@ def update_task(task_id: int, task: Task):
         now = datetime.datetime.now()
         query = """
         UPDATE task
-        SET taskname = ?, details = ?, updated_at = ?
+        SET taskname = ?, details = ?, updated_at = ?, status = ?
         WHERE id = ?
         """
-        cursor.execute(query, (task.taskname, task.details, now, task_id))
+        cursor.execute(query, (task.taskname, task.details, now, task.status, task_id))
         conn.commit()
         return {"message": "Task updated successfully"}
     except Exception as e:
@@ -122,34 +160,6 @@ def delete_task(task_id: int):
         conn.close()
 
 
-# @app.get("/tasks/daily/{query_date}")
-# def get_daily_updates(query_date: query_date):
-#     conn = get_connection()
-#     cursor = conn.cursor()
-    
-#     query = """
-#     SELECT *
-#     FROM updates
-#     WHERE CAST(updated_at AS DATE) = ?
-#     ORDER BY updated_at DESC
-#     """
-#     cursor.execute(query, query_date, query_date)
-#     rows = cursor.fetchall()
-    
-#     tasks = [
-#         {
-#             "id": row[0],
-#             "taskname": row[1],
-#             "details": row[2],
-#             "created_at": row[3],
-#             "updated_at": row[4],
-#         }
-#         for row in rows
-#     ]
-    
-#     conn.close()
-#     return tasks
-
 @app.get("/getUpdates")
 def get_updates():
     try:
@@ -169,7 +179,7 @@ def get_updates():
                 "id": row[0],
                 "Updated_Time": row[1],
                 "Task_Name": row[2],
-                "Updates": row[3],
+                "Update": row[3],
                 "Efforts": row[4]
             })
         return result
@@ -186,10 +196,10 @@ def add_updates(task: Update):
         cursor = conn.cursor()
         now = datetime.datetime.now()
         query = """
-        INSERT INTO updates (Task_name, updates, Efforts)
+        INSERT INTO updates (Task_name, [update], Efforts)
         VALUES (?, ?, ?)
         """
-        cursor.execute(query, (task.taskname, task.updates, task.efforts))
+        cursor.execute(query, (task.task, task.update, task.efforts))
         conn.commit()
         return {"message": "Task inserted successfully"}
     except Exception as e:
@@ -209,7 +219,7 @@ def edit_updates(update_id: int, task: Update):
         SET task_name = ?, updates = ?, efforts = ?
         WHERE id = ?
         """
-        cursor.execute(query, (task.taskname, task.updates, task.efforts, update_id))
+        cursor.execute(query, (task.taskname, task.update, task.efforts, update_id))
         conn.commit()
         return {"message": "Task updated successfully"}
     except Exception as e:
